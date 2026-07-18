@@ -557,7 +557,7 @@ function AiSuggestion({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-white p-3 dark:bg-slate-900">
       <p className="text-xs text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-bold capitalize">{value}</p>
+      <p className="mt-1 text-sm font-bold capitalize text-slate-900 dark:text-slate-100">{value}</p>
     </div>
   );
 }

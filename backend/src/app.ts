@@ -9,7 +9,7 @@ import { healthRouter } from './routes/health.routes.js';
 import { authRouter } from './routes/auth.routes.js';
 import { issueRouter } from './routes/issue.routes.js';
 import { adminRouter } from './routes/admin.routes.js';
-// import { aiRouter } from './routes/ai.routes.js';
+import { aiRouter } from './routes/ai.routes.js';
 
 export const app = express();
 
@@ -25,7 +25,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/issues', issueRouter);
 app.use('/api/admin', adminRouter);
-// app.use('/api/ai', aiRouter);
+app.use('/api/ai', aiRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

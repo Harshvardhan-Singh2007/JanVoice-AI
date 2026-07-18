@@ -13,6 +13,7 @@ export const env = {
   mongoUri: required('MONGODB_URI'),
   jwtSecret: required('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
+  geminiApiKey: required('GEMINI_API_KEY'),
 } as const;
 
 if (!Number.isInteger(env.port) || env.port < 1 || env.port > 65535) {
