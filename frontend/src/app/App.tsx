@@ -7,7 +7,7 @@ import { StatisticsSection } from '../components/sections/StatisticsSection';
 
 export function LandingPage() {
   return (
-    <div className="app-shell">
+    <div className="app-shell landing-page">
       <main className="min-h-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)]">
         <Navbar />
         <HeroSection />
