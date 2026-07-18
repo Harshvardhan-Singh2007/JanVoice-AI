@@ -1,0 +1,13 @@
+declare global {
+  namespace Express {
+    interface Request {
+      requestId?: string;
+      auth?: {
+        userId: string;
+        role: 'citizen' | 'authority' | 'admin';
+      };
+    }
+  }
+}
+
+export {};

@@ -1,0 +1,11 @@
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../features/auth/AuthContext';
+import { Icon } from '../ui/Icon';
+
+const links = [{ to: '/dashboard/citizen', label: 'Dashboard', icon: 'community' }, { to: '/dashboard/citizen/report', label: 'Report Issue', icon: 'mic' }, { to: '/dashboard/citizen/reports', label: 'My Reports', icon: 'tracking' }, { to: '/dashboard/citizen/notifications', label: 'Notifications', icon: 'check' }, { to: '/dashboard/citizen/profile', label: 'Profile', icon: 'community' }, { to: '/dashboard/citizen/settings', label: 'Settings', icon: 'route' }] as const;
+
+export function CitizenLayout() {
+  const { user, logout } = useAuth(); const navigate = useNavigate();
+  const signOut = () => { logout(); navigate('/'); };
+  return <div className="min-h-screen bg-slate-50 dark:bg-slate-950 lg:flex"><aside className="border-b border-slate-200 bg-white dark:border-white/10 dark:bg-slate-900 lg:fixed lg:inset-y-0 lg:w-64 lg:border-b-0 lg:border-r"><div className="flex h-full flex-col p-4"><Link to="/" className="flex items-center gap-2 px-2 py-3 text-lg font-bold"><span className="grid h-8 w-8 place-items-center rounded-xl bg-cyan-500 text-sm text-slate-950">J</span>JanVoice <span className="text-cyan-600">AI</span></Link><nav className="mt-3 flex gap-1 overflow-x-auto lg:flex-col">{links.map((link) => <NavLink end={link.to === '/dashboard/citizen'} key={link.to} to={link.to} className={({ isActive }) => `flex shrink-0 items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition ${isActive ? 'bg-cyan-500 text-slate-950' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10'}`}><Icon name={link.icon} className="h-4 w-4" />{link.label}</NavLink>)}</nav><div className="mt-3 rounded-2xl bg-slate-100 p-3 dark:bg-white/5 lg:mt-auto"><p className="hidden truncate text-sm font-bold lg:block">{user?.fullName}</p><p className="hidden mt-1 text-xs capitalize text-slate-500 lg:block">Citizen account</p><button onClick={signOut} className="flex items-center gap-2 text-xs font-bold text-rose-600 lg:mt-3"><Icon name="close" className="h-4 w-4" />Logout</button></div></div></aside><main className="min-w-0 flex-1 lg:ml-64"><Outlet /></main></div>;
+}

@@ -1,0 +1,4 @@
+import type { Issue } from '../../types/issue';
+
+const steps = ['Complaint Submitted', 'AI Categorized', 'Authority Assigned', 'Work Started', 'Resolved'];
+export function Timeline({ issue }: { issue: Issue }) { const complete = issue.status === 'Resolved' ? 5 : issue.status === 'In Progress' ? 4 : issue.status === 'Assigned' ? 3 : 2; return <ol className="mt-5 space-y-4">{steps.map((step, index) => <li key={step} className="flex gap-3"><span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${index < complete ? 'bg-cyan-500 text-slate-950' : 'bg-slate-200 text-slate-500 dark:bg-white/10'}`}>{index < complete ? '✓' : index + 1}</span><div><p className="text-sm font-semibold">{step}</p>{index === 0 && <p className="text-xs text-slate-500">{new Date(issue.createdAt).toLocaleString()}</p>}</div></li>)}</ol>; }
