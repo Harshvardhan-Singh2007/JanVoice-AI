@@ -16,6 +16,8 @@ export interface Issue {
   image?: string;
   reporter: Types.ObjectId;
   status: IssueStatus;
+  assignedDepartment?: string;
+  remarks?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,6 +36,8 @@ const issueSchema = new Schema<Issue>(
     image: { type: String, trim: true },
     reporter: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     status: { type: String, enum: issueStatuses, default: 'Pending', required: true },
+    assignedDepartment: { type: String, trim: true, maxlength: 120 },
+    remarks: { type: String, trim: true, maxlength: 2000 },
   },
   { timestamps: true },
 );

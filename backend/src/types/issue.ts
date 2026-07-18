@@ -1,4 +1,4 @@
-import type { IssuePriority } from '../models/Issue.js';
+import type { IssuePriority, IssueStatus } from '../models/Issue.js';
 
 export interface CreateIssueInput {
   title: string;
@@ -9,4 +9,14 @@ export interface CreateIssueInput {
   anonymous?: boolean;
   emergency?: boolean;
   image?: string;
+}
+
+export interface UpdateIssueStatusInput {
+  status: Extract<IssueStatus, 'Pending' | 'In Progress' | 'Resolved'>;
+}
+
+export interface UpdateIssueInput {
+  status?: Extract<IssueStatus, 'Pending' | 'In Progress' | 'Resolved'>;
+  assignedDepartment?: string;
+  remarks?: string;
 }

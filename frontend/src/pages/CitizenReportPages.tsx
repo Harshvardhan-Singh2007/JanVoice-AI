@@ -11,7 +11,7 @@ const toDisplayIssue = (issue: ApiIssue): Issue => ({ id: issue._id, title: issu
 
 export function MyReportsPage() {
   const [reports, setReports] = useState<Issue[]>([]); const [search, setSearch] = useState(''); const [status, setStatus] = useState<'All' | IssueStatus>('All'); const [sort, setSort] = useState('newest'); const [selected, setSelected] = useState<Issue>(); const [, setLoadError] = useState('');
-  useEffect(() => { getMyIssues().then((issues) => setReports(issues.map(toDisplayIssue))).catch(() => setLoadError('Unable to load reports. Please refresh and try again.')); }, []);
+  useEffect(() => { const loadReports = () => { getMyIssues().then((issues) => setReports(issues.map(toDisplayIssue))).catch(() => setLoadError('Unable to load reports. Please refresh and try again.')); }; loadReports(); const interval = window.setInterval(loadReports, 15000); return () => window.clearInterval(interval); }, []);
   const visible = useMemo(() => reports.filter((report) => (status === 'All' || report.status === status) && `${report.title} ${report.location} ${report.id}`.toLowerCase().includes(search.toLowerCase())).sort((a, b) => sort === 'newest' ? +new Date(b.createdAt) - +new Date(a.createdAt) : a.title.localeCompare(b.title)), [reports, search, status, sort]);
   const remove = (id: string) => { issueStorage.deleteReport(id); setReports(issueStorage.reports()); };
   const edit = (issue: Issue) => { const next = { ...issue, status: issue.status === 'Pending' ? 'Assigned' as IssueStatus : issue.status }; issueStorage.updateReport(next); issueStorage.addNotification(`Status updated for ${issue.id}: ${next.status}.`); setReports(issueStorage.reports()); setSelected(next); };
