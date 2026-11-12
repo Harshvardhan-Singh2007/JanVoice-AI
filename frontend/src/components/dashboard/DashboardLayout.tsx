@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useAuth } from '../../features/auth/AuthContext';
+import { useAuth } from '../../features/auth/useAuth';
 import { Icon, type IconName } from '../ui/Icon';
 
 export function DashboardLayout({
@@ -11,7 +11,7 @@ export function DashboardLayout({
 }: {
   title: string;
   subtitle: string;
-  cards: { title: string; detail: string; icon: IconName; accent?: string }[];
+  cards: { title: string; detail: string; icon: IconName; accent?: string; to?: string }[];
   children?: ReactNode;
 }) {
   const { user, logout } = useAuth();
@@ -28,7 +28,7 @@ export function DashboardLayout({
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
           <Link to="/" className="app-brand">
             <span className="app-brand-mark">J</span>
-            JanVoice <span className="text-[var(--color-primary)]">AI</span>
+            JAN Voice <span className="text-[var(--color-primary)]">AI</span>
           </Link>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
@@ -56,15 +56,11 @@ export function DashboardLayout({
               </div>
               <h2 className="mt-6 text-lg font-bold">{card.title}</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">{card.detail}</p>
-              <button className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--color-primary)]">
-                Open <Icon name="arrow" className="h-4 w-4" />
-              </button>
+              {card.to ? <Link to={card.to} className="mt-5 inline-flex items-center gap-1 text-sm font-bold text-[var(--color-primary)]">Open <Icon name="arrow" className="h-4 w-4" /></Link> : <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-slate-500">Planned</span>}
             </article>
           ))}
         </div>
-        <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          {children}
-        </section>
+        {children && <section className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">{children}</section>}
       </main>
     </div>
   );

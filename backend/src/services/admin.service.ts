@@ -32,4 +32,4 @@ export const getRecentActivity = () => IssueModel.find()
 export const getAdminNotifications = () => IssueModel.find({ status: { $in: ['Pending', 'In Progress'] } })
   .sort({ updatedAt: -1 })
   .limit(10)
-  .select('title status priority updatedAt createdAt');
+  .select('title status priority emergency updatedAt createdAt');

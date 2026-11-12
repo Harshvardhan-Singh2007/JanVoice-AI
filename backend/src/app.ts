@@ -14,12 +14,13 @@ import { aiRouter } from './routes/ai.routes.js';
 export const app = express();
 
 app.disable('x-powered-by');
+app.set('trust proxy', env.trustProxyHops);
 app.use(helmet());
 app.use(cors({ origin: env.clientUrl, credentials: true }));
+app.use((request, _response, next) => { request.requestId = crypto.randomUUID(); next(); });
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use((request, _response, next) => { request.requestId = crypto.randomUUID(); next(); });
-app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+app.use(morgan(':method :status :response-time ms'));
 
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);

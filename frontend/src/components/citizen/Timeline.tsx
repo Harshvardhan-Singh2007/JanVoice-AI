@@ -1,4 +1,6 @@
-import type { Issue } from '../../types/issue';
+import type { ApiIssue } from '../../features/issues/issueApi';
 
-const steps = ['Complaint Submitted', 'AI Categorized', 'Authority Assigned', 'Work Started', 'Resolved'];
-export function Timeline({ issue }: { issue: Issue }) { const complete = issue.status === 'Resolved' ? 5 : issue.status === 'In Progress' ? 4 : issue.status === 'Assigned' ? 3 : 2; return <ol className="mt-5 space-y-4">{steps.map((step, index) => <li key={step} className="flex gap-3"><span className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${index < complete ? 'bg-cyan-500 text-slate-950' : 'bg-slate-200 text-slate-500 dark:bg-white/10'}`}>{index < complete ? '✓' : index + 1}</span><div><p className="text-sm font-semibold">{step}</p>{index === 0 && <p className="text-xs text-slate-500">{new Date(issue.createdAt).toLocaleString()}</p>}</div></li>)}</ol>; }
+export function Timeline({ issue }: { issue: ApiIssue }) {
+  const updates = [...(issue.updates ?? [])].sort((left, right) => +new Date(left.createdAt) - +new Date(right.createdAt));
+  return <ol className="mt-5 space-y-4">{(updates.length ? updates : [{ _id: issue._id, kind: 'submitted' as const, message: 'Report submitted.', createdAt: issue.createdAt }]).map((update) => <li key={update._id} className="flex gap-3"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-cyan-500 text-xs font-bold text-slate-950">✓</span><div><p className="text-sm font-semibold">{update.message}</p><p className="text-xs text-slate-500">{new Date(update.createdAt).toLocaleString()}</p></div></li>)}</ol>;
+}

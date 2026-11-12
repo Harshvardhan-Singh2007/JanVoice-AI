@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useAuth } from '../../features/auth/AuthContext';
-import { deleteIssue, getIssue, type ApiIssue, updateIssue } from '../../features/issues/issueApi';
+import { useAuth } from '../../features/auth/useAuth';
+import { deleteIssue, getIssue, type ApiIssue, type UpdateIssueRequest, updateIssue } from '../../features/issues/issueApi';
 
-type Status = 'Pending' | 'In Progress' | 'Resolved';
+type Status = 'Pending' | 'Assigned' | 'In Progress' | 'Resolved' | 'Rejected';
 
 export function IssueDetailsModal({ issueId, onClose, onSaved }: { issueId: string; onClose: () => void; onSaved: () => Promise<void> }) {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [issue, setIssue] = useState<ApiIssue>();
   const [status, setStatus] = useState<Status>('Pending');
   const [department, setDepartment] = useState('');
@@ -36,11 +37,27 @@ export function IssueDetailsModal({ issueId, onClose, onSaved }: { issueId: stri
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    if (!issue) return;
+    if ((status !== issue.status || (isAdmin && department !== (issue.assignedDepartment ?? '')))
+      && !window.confirm('Save these complaint workflow changes?')) return;
+    const changes: UpdateIssueRequest = {
+      ...(status !== issue.status && status !== 'Pending' ? { status } : {}),
+      ...(isAdmin && department !== (issue.assignedDepartment ?? '') ? { assignedDepartment: department } : {}),
+      ...(remarks !== (issue.remarks ?? '') ? { remarks } : {}),
+    };
+    if (Object.keys(changes).length === 0) {
+      setMessage('No changes to save.');
+      return;
+    }
     setSaving(true);
     setError('');
     setMessage('');
     try {
-      await updateIssue(issueId, { status, assignedDepartment: department, remarks });
+      const updated = await updateIssue(issueId, changes);
+      setIssue(updated);
+      setStatus(updated.status as Status);
+      setDepartment(updated.assignedDepartment ?? '');
+      setRemarks(updated.remarks ?? '');
       await onSaved();
       setMessage('Issue updated successfully.');
     } catch {
@@ -86,31 +103,30 @@ export function IssueDetailsModal({ issueId, onClose, onSaved }: { issueId: stri
               <div className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
                 <p><span className="text-slate-500">Category:</span> {issue.category}</p>
                 <p><span className="text-slate-500">Priority:</span> {issue.priority}</p>
+                <p><span className="text-slate-500">Urgency:</span> {issue.emergency ? 'Citizen flagged this report as urgent' : 'No urgent flag'}</p>
                 <p><span className="text-slate-500">Location:</span> {issue.location}</p>
                 <p><span className="text-slate-500">Reported:</span> {new Date(issue.createdAt).toLocaleString()}</p>
               </div>
+              {issue.image && <img src={issue.image} alt="Citizen submitted evidence" className="mt-4 max-h-64 rounded-xl object-contain" />}
+              {issue.coordinates && <p className="mt-3 text-xs text-slate-500">Shared GPS: {issue.coordinates.latitude.toFixed(4)}, {issue.coordinates.longitude.toFixed(4)}</p>}
             </section>
             <label className="app-label">
               Status
               <select value={status} onChange={(event) => setStatus(event.target.value as Status)} className="app-input">
-                <option>Pending</option>
-                <option>In Progress</option>
-                <option>Resolved</option>
+                <option value={status}>{status}</option>
+                {(status === 'Pending' ? ['Assigned', 'In Progress', 'Rejected'] : status === 'Assigned' ? ['In Progress', 'Rejected'] : status === 'In Progress' ? ['Resolved', 'Rejected'] : []).map((next) => <option key={next}>{next}</option>)}
               </select>
             </label>
+            {isAdmin && <label className="app-label">Assigned Department<input value={department} onChange={(event) => setDepartment(event.target.value)} placeholder="e.g. Water Supply Board" className="app-input" /><span className="text-xs font-normal text-slate-500">Assigning a department moves a pending report to Assigned.</span></label>}
             <label className="app-label">
-              Assigned Department
-              <input value={department} onChange={(event) => setDepartment(event.target.value)} placeholder="e.g. Water Supply Board" className="app-input" />
+              Official remarks / resolution details
+              <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} placeholder="Share official progress, follow-up actions, or resolution details." className="app-input min-h-[120px] resize-y" />
             </label>
-            <label className="app-label">
-              Remarks
-              <textarea value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={4} placeholder="Share context, follow-up actions, or next steps." className="app-input min-h-[120px] resize-y" />
-            </label>
+            {issue.aiAnalysis && <section className="rounded-xl border border-violet-100 bg-violet-50 p-4"><h3 className="font-bold text-violet-950">AI recommendation (citizen reviewed)</h3><p className="mt-2 text-sm"><strong>{issue.aiAnalysis.category}</strong> · {issue.aiAnalysis.department} · suggested {issue.aiAnalysis.priority} priority</p><p className="mt-2 text-sm text-slate-700">{issue.aiAnalysis.reviewedSummary ?? issue.aiAnalysis.summary}</p><p className="mt-2 text-xs text-slate-500">{issue.aiAnalysis.explanation}</p></section>}
+            {issue.updates?.length ? <section><h3 className="font-bold">Update history</h3><ol className="mt-3 space-y-3">{[...issue.updates].reverse().map((entry) => <li key={entry._id} className="rounded-xl border border-slate-200 p-3"><p className="text-sm font-semibold">{entry.message}</p><p className="mt-1 text-xs text-slate-500">{typeof entry.actor === 'object' ? `${entry.actor.fullName} · ${entry.actor.role}` : 'Staff update'} · {new Date(entry.createdAt).toLocaleString()}</p></li>)}</ol></section> : null}
             <div className="flex flex-wrap gap-3">
               <button disabled={saving} type="submit" className="app-button">{saving ? 'Saving...' : 'Save changes'}</button>
-              <button type="button" onClick={remove} disabled={saving} className="app-button-secondary border-rose-200 text-rose-600 hover:border-rose-300 hover:text-rose-700">
-                Delete issue
-              </button>
+              {isAdmin && <button type="button" onClick={remove} disabled={saving} className="app-button-secondary border-rose-200 text-rose-600 hover:border-rose-300 hover:text-rose-700">Delete issue</button>}
             </div>
           </form>
         )}

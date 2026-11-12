@@ -1,60 +1,17 @@
 import { isAxiosError } from "axios";
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { IssueCard } from "../components/citizen/IssueCard";
-import { Timeline } from "../components/citizen/Timeline";
 import { Icon } from "../components/ui/Icon";
-import { issueStorage } from "../features/issues/issueStorage";
-import { createIssue } from "../features/issues/issueApi";
+import { checkPotentialDuplicates, createIssue, getIssueMapMarkers, getMyIssues, getMyIssueStatistics, type ApiIssue, type IssueMapMarker, type MyIssueStatistics, type PotentialDuplicate } from "../features/issues/issueApi";
 import {
   analyzeComplaint,
   type AiComplaintAnalysis,
 } from "../features/ai/aiApi";
-import type { AiAnalysis, Issue, IssuePriority } from "../types/issue";
-
-const analysisFor = (
-  title: string,
-  category: string,
-  priority: IssuePriority,
-): AiAnalysis => ({
-  category:
-    category ||
-    (title.toLowerCase().includes("garbage")
-      ? "Sanitation"
-      : "Civic Infrastructure"),
-  priorityScore:
-    priority === "Critical"
-      ? 91
-      : priority === "High"
-        ? 78
-        : priority === "Medium"
-          ? 62
-          : 35,
-  severityScore:
-    priority === "Critical"
-      ? 9
-      : priority === "High"
-        ? 7
-        : priority === "Medium"
-          ? 5
-          : 3,
-  department:
-    category === "Roads"
-      ? "Public Works Department"
-      : category === "Water"
-        ? "Water Supply Board"
-        : "Municipal Corporation",
-  eta:
-    priority === "Critical"
-      ? "24 Hours"
-      : priority === "High"
-        ? "2 Days"
-        : "3 Days",
-  confidence: 95,
-  improvedComplaint: `A civic issue has been reported regarding ${title.toLowerCase()}. The concerned authority is requested to inspect the location and take appropriate action at the earliest.`,
-});
-void analysisFor;
+import type { IssuePriority } from "../types/issue";
+import { IssueMap } from "../components/citizen/IssueMap";
+import { Timeline } from "../components/citizen/Timeline";
+import { appendRecognizedText, getSpeechRecognitionConstructor, speechRecognitionErrorMessage, type SpeechRecognitionLike, type SpeechRecognitionWindow } from "../features/voice/speechRecognition";
 
 const issueCategories = [
   "Sanitation",
@@ -71,7 +28,43 @@ const priorityFromAi: Record<AiComplaintAnalysis["priority"], IssuePriority> = {
 };
 
 export function CitizenHome() {
-  const reports = issueStorage.reports();
+  const [reports, setReports] = useState<ApiIssue[]>([]);
+  const [statistics, setStatistics] = useState<MyIssueStatistics>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [mapMarkers, setMapMarkers] = useState<IssueMapMarker[]>([]);
+  const [mapUnavailable, setMapUnavailable] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<ApiIssue>();
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([getMyIssues(), getMyIssueStatistics()])
+      .then(([issues, counts]) => {
+        if (!active) return;
+        setReports(issues);
+        setStatistics(counts);
+        setError("");
+      })
+      .catch(() => {
+        if (active) setError("Unable to load your reports right now. Please try again.");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    getIssueMapMarkers().then((markers) => {
+      if (active) {
+        setMapMarkers(markers);
+        setMapUnavailable(false);
+      }
+    }).catch(() => {
+      if (active) {
+        setMapMarkers([]);
+        setMapUnavailable(true);
+      }
+    });
+    return () => { active = false; };
+  }, [refreshKey]);
+
   return (
     <div className="p-5 sm:p-8 lg:p-10">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
@@ -80,10 +73,10 @@ export function CitizenHome() {
             Citizen dashboard
           </p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-            Make your city work better.
+            Your civic reports.
           </h1>
           <p className="mt-2 text-slate-600 dark:text-slate-300">
-            Your reports help turn local concerns into visible change.
+            Submit a report, review its current status, and read updates recorded in JAN Voice AI.
           </p>
         </div>
         <Link
@@ -94,23 +87,14 @@ export function CitizenHome() {
           Report an issue
         </Link>
       </div>
-      <div className="mt-9 grid gap-4 sm:grid-cols-3">
-        <Stat label="My Reports" value={reports.length} icon="tracking" />
-        <Stat
-          label="In Progress"
-          value={
-            reports.filter((report) => report.status === "In Progress").length
-          }
-          icon="route"
-        />
-        <Stat
-          label="Resolved"
-          value={
-            reports.filter((report) => report.status === "Resolved").length
-          }
-          icon="check"
-        />
+      <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Stat label="My Reports" value={statistics?.total} loading={loading} icon="tracking" />
+        <Stat label="Pending" value={statistics?.pending} loading={loading} icon="route" />
+        <Stat label="In Progress" value={statistics?.inProgress} loading={loading} icon="route" />
+        <Stat label="Resolved" value={statistics?.resolved} loading={loading} icon="check" />
       </div>
+      {loading && <p role="status" className="mt-5 text-sm text-slate-500">Loading your civic reports…</p>}
+      {error && <div role="alert" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700"><span>{error}</span><button onClick={() => setRefreshKey((key) => key + 1)} className="font-bold underline">Retry</button></div>}
       <section className="mt-10">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold">Recent reports</h2>
@@ -122,32 +106,37 @@ export function CitizenHome() {
           </Link>
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          {reports.slice(0, 2).map((report) => (
-            <IssueCard key={report.id} issue={report} />
+          {!loading && !error && reports.slice(0, 2).map((report) => (
+            <IssueCard key={report._id} issue={report} onTrack={setSelectedReport} />
           ))}
-          {reports.length === 0 && (
+          {loading && <p role="status" className="text-sm text-slate-500">Loading your reports...</p>}
+          {!loading && !error && reports.length === 0 && (
             <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-white/15">
-              No reports yet. Your voice can start the change.
+              No reports yet. Submit a report to begin tracking updates here.
             </div>
           )}
         </div>
       </section>
+      <IssueMap markers={mapMarkers} unavailable={mapUnavailable} />
+      {selectedReport && <section className="mt-8 max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/[.04]"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-cyan-700">Report status</p><h2 className="mt-1 font-bold">{selectedReport.title}</h2><p className="mt-1 text-sm text-slate-500">{selectedReport.status} · {selectedReport._id}</p></div><button onClick={() => setSelectedReport(undefined)} className="text-sm font-bold text-slate-500">Close</button></div><Timeline issue={selectedReport} /></section>}
     </div>
   );
 }
 function Stat({
   label,
   value,
+  loading,
   icon,
 }: {
   label: string;
-  value: number;
+  value?: number;
+  loading: boolean;
   icon: "tracking" | "route" | "check";
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/[.04]">
       <Icon name={icon} className="h-5 w-5 text-cyan-600" />
-      <p className="mt-5 text-3xl font-bold">{value}</p>
+      <p className="mt-5 text-3xl font-bold">{loading || value === undefined ? '—' : value.toLocaleString()}</p>
       <p className="mt-1 text-sm text-slate-500">{label}</p>
     </div>
   );
@@ -160,10 +149,7 @@ export function ReportIssuePage() {
     description: "",
     category: "Sanitation",
     location: "",
-    pincode: "",
-    landmark: "",
     priority: "Medium" as IssuePriority,
-    anonymous: false,
     emergency: false,
   });
   const [imageFile, setImageFile] = useState<File>();
@@ -172,14 +158,120 @@ export function ReportIssuePage() {
   const [submitting, setSubmitting] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [analysis, setAnalysis] = useState<AiComplaintAnalysis>();
-  const [issue] = useState<Issue>();
   const [error, setError] = useState("");
   const [aiError, setAiError] = useState("");
   const aiRequestInFlight = useRef(false);
   const toastTimer = useRef<number | undefined>(undefined);
   const toastElement = useRef<HTMLDivElement | undefined>(undefined);
-  const update = (key: keyof typeof form, value: string | boolean) =>
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiReviewState, setAiReviewState] = useState<"accepted" | "edited" | "rejected">();
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("");
+  const speechRecognizer = useRef<SpeechRecognitionLike | undefined>(undefined);
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number }>();
+  const [locationStatus, setLocationStatus] = useState("");
+  const [duplicates, setDuplicates] = useState<PotentialDuplicate[]>([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [duplicateMessage, setDuplicateMessage] = useState("");
+  const update = (key: keyof typeof form, value: string | boolean) => {
     setForm((current) => ({ ...current, [key]: value }) as typeof current);
+    if ((key === "category" || key === "priority") && analysis && aiReviewState === "accepted") setAiReviewState("edited");
+    if (key === "title" || key === "description" || key === "category") {
+      setDuplicates([]);
+      setDuplicateMessage("");
+    }
+  };
+  const setComplaintDescription = (value: string) => {
+    update("description", value.slice(0, 5000));
+    setAnalysis(undefined);
+    setAiSummary("");
+    setAiReviewState(undefined);
+  };
+  const startVoiceInput = () => {
+    const SpeechRecognition = getSpeechRecognitionConstructor(window as unknown as SpeechRecognitionWindow);
+    if (!SpeechRecognition) {
+      setVoiceStatus("Voice input is not supported in this browser. You can type your report instead.");
+      return;
+    }
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = navigator.language || "en-IN";
+      recognition.interimResults = false;
+      recognition.onresult = (event) => {
+        const transcript = Array.from({ length: event.results.length - event.resultIndex }, (_, index) => event.results[event.resultIndex + index]?.[0]?.transcript ?? "").join(" ").trim();
+        if (transcript) {
+          setForm((current) => ({ ...current, description: appendRecognizedText(current.description, transcript) }));
+          setAnalysis(undefined);
+          setAiSummary("");
+          setAiReviewState(undefined);
+          setDuplicates([]);
+          setVoiceStatus("Transcript added. Review and edit it in the description field.");
+        }
+      };
+      recognition.onerror = (event) => {
+        setVoiceStatus(speechRecognitionErrorMessage(event.error));
+      };
+      recognition.onend = () => {
+        setVoiceListening(false);
+        speechRecognizer.current = undefined;
+      };
+      speechRecognizer.current = recognition;
+      recognition.start();
+      setVoiceListening(true);
+      setVoiceStatus("Listening. Speak clearly, then review the transcript.");
+    } catch {
+      setVoiceListening(false);
+      setVoiceStatus("Microphone access is unavailable. You can type your report instead.");
+    }
+  };
+  const stopVoiceInput = () => speechRecognizer.current?.stop();
+  const requestCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus("Location sharing is not supported by this browser. You can continue without GPS.");
+      return;
+    }
+    setLocationStatus("Waiting for location permission…");
+    navigator.geolocation.getCurrentPosition(({ coords: position }) => {
+      if (!Number.isFinite(position.latitude) || !Number.isFinite(position.longitude)
+        || position.latitude < -90 || position.latitude > 90 || position.longitude < -180 || position.longitude > 180) {
+        setLocationStatus("The browser returned an invalid location. Continue without GPS.");
+        return;
+      }
+      setCoordinates({ latitude: position.latitude, longitude: position.longitude });
+      setDuplicates([]);
+      setDuplicateMessage("");
+      setLocationStatus("GPS location attached to this report. It will be shown approximately on the map.");
+    }, (error) => {
+      const message = error.code === error.PERMISSION_DENIED
+        ? "Location permission was denied. You can continue without GPS."
+        : "Current location could not be read. You can continue without GPS.";
+      setLocationStatus(message);
+    }, { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 });
+  };
+  const runDuplicateCheck = async () => {
+    if (checkingDuplicates) return;
+    if (form.title.trim().length < 5 || form.description.trim().length < 15) {
+      setDuplicateMessage("Add a title and description before checking for similar reports.");
+      return;
+    }
+    setCheckingDuplicates(true);
+    setDuplicateMessage("");
+    try {
+      const matches = await checkPotentialDuplicates({
+        title: form.title,
+        description: form.description,
+        category: form.category,
+        ...(coordinates ? { coordinates } : {}),
+      });
+      setDuplicates(matches);
+      setDuplicateMessage(matches.length ? "These reports may describe a similar issue. Your report will still be submitted separately." : "No similar reports were found.");
+    } catch {
+      setDuplicateMessage("Similar report check is unavailable. You can still submit your report.");
+      setDuplicates([]);
+    } finally {
+      setCheckingDuplicates(false);
+    }
+  };
   useEffect(
     () => () => {
       if (toastTimer.current) window.clearTimeout(toastTimer.current);
@@ -193,6 +285,7 @@ export function ReportIssuePage() {
     },
     [imagePreview],
   );
+  useEffect(() => () => speechRecognizer.current?.stop(), []);
   const showToast = (message: string, type: "success" | "error") => {
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     const element = toastElement.current ?? document.createElement("div");
@@ -207,7 +300,7 @@ export function ReportIssuePage() {
     }, 4000);
   };
   const analyzeWithAi = async () => {
-    if (aiLoading || aiRequestInFlight.current) return;
+    if (aiLoading || aiRequestInFlight.current || analysis) return;
     if (form.description.trim().length < 10) {
       const message =
         "Enter at least 10 characters in the description before using AI analysis.";
@@ -219,7 +312,16 @@ export function ReportIssuePage() {
     aiRequestInFlight.current = true;
     setAiLoading(true);
     try {
-      setAnalysis(await analyzeComplaint(form.description));
+      const result = await analyzeComplaint(form.description);
+      if (!result.available) {
+        setAnalysis(undefined);
+        setAiError(result.message);
+        return;
+      }
+      setAnalysis(result);
+      setAiSummary(result.summary);
+      setAiReviewState(undefined);
+      setAiError("");
       showToast("AI suggestions are ready for your review.", "success");
     } catch {
       const message =
@@ -235,10 +337,11 @@ export function ReportIssuePage() {
     if (!analysis) return;
     setForm((current) => ({
       ...current,
-      description: analysis.professionalVersion,
       category: analysis.category,
       priority: priorityFromAi[analysis.priority],
     }));
+    setAiSummary(analysis.summary);
+    setAiReviewState("accepted");
     setAiError("");
     showToast(
       "AI suggestions applied. Review the form before submitting.",
@@ -291,11 +394,15 @@ export function ReportIssuePage() {
         category: form.category,
         priority: form.priority,
         location: form.location,
-        anonymous: form.anonymous,
         emergency: form.emergency,
         image: imageFile,
+        ...(coordinates ? { coordinates } : {}),
+        ...(analysis && aiReviewState ? {
+          analysisToken: analysis.analysisToken,
+          aiReviewState,
+          ...(aiReviewState !== "rejected" ? { aiSummary } : {}),
+        } : {}),
       });
-      issueStorage.addNotification("Report submitted successfully.");
       navigate("/dashboard/citizen/reports", {
         replace: true,
         state: { success: "Report submitted successfully." },
@@ -326,16 +433,17 @@ export function ReportIssuePage() {
           Report an issue
         </h1>
         <p className="mt-2 text-slate-600 dark:text-slate-300">
-          Give us the details. JanVoice AI will help direct it to the right
-          place.
+          Describe the issue clearly. AI suggestions are optional, and staff assignment happens within this platform.
         </p>
       </div>
-      {!issue ? (
-        <form onSubmit={submit} className="mt-8 max-w-4xl space-y-6">
+      <form onSubmit={submit} className="mt-8 max-w-4xl space-y-6">
           <section className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/[.04] sm:p-7">
             <label className="text-sm font-bold">
-              Issue Title
+                Issue title
               <input
+                  required
+                  minLength={5}
+                  maxLength={160}
                 value={form.title}
                 onChange={(e) => update("title", e.target.value)}
                 placeholder="e.g. Garbage collection missed on Park Street"
@@ -343,20 +451,31 @@ export function ReportIssuePage() {
               />
             </label>
             <label className="text-sm font-bold">
-              Issue Description
+                Issue description
               <textarea
+                required
+                minLength={15}
                 value={form.description}
-                onChange={(e) => update("description", e.target.value)}
+                maxLength={5000}
+                onChange={(e) => {
+                  setComplaintDescription(e.target.value);
+                }}
                 placeholder="Describe what happened, when you noticed it, and how it affects the area..."
                 rows={5}
                 className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-cyan-500 dark:border-white/10 dark:bg-white/5"
               />
             </label>
+            <div className="-mt-3 flex flex-wrap items-center gap-3">
+              <button type="button" onClick={voiceListening ? stopVoiceInput : startVoiceInput} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold dark:border-white/15">
+                <Icon name="mic" className="h-4 w-4" />{voiceListening ? "Stop voice input" : "Dictate complaint"}
+              </button>
+              <p role="status" className="text-xs text-slate-500">{voiceStatus || "Voice input is optional. JAN Voice AI receives the editable transcript only; microphone audio is not uploaded or stored by this app."}</p>
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={analyzeWithAi}
-                disabled={aiLoading}
+                disabled={aiLoading || Boolean(analysis)}
                 className="inline-flex items-center justify-center rounded-xl border border-cyan-500 px-4 py-2.5 text-sm font-bold text-cyan-700 disabled:opacity-70 dark:border-cyan-400 dark:text-cyan-300"
               >
                 {aiLoading ? (
@@ -380,14 +499,14 @@ export function ReportIssuePage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <Icon name="brain" className="text-cyan-600" />
-                    <h2 className="font-bold">AI suggestions</h2>
+                    <h2 className="font-bold">AI generated recommendations</h2>
                   </div>
                   <button
                     type="button"
                     onClick={applyAiSuggestions}
                     className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white dark:bg-cyan-500 dark:text-slate-950"
                   >
-                    Apply AI Suggestions
+                    Accept and apply suggestions
                   </button>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -398,14 +517,18 @@ export function ReportIssuePage() {
                   />
                   <AiSuggestion label="Priority" value={analysis.priority} />
                   <AiSuggestion label="Language" value={analysis.language} />
+                  <AiSuggestion label="Why this recommendation" value={analysis.explanation} />
                 </div>
                 <div className="mt-4 rounded-xl bg-white p-4 dark:bg-slate-900">
                   <p className="text-xs font-bold uppercase tracking-wider text-cyan-700 dark:text-cyan-300">
-                    Professional version
+                    AI suggested summary (separate from your original description)
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-slate-700 dark:text-slate-200">
-                    {analysis.professionalVersion}
-                  </p>
+                  <textarea value={aiSummary} onChange={(event) => {
+                    setAiSummary(event.target.value);
+                    if (aiReviewState === "accepted") setAiReviewState("edited");
+                  }} maxLength={2000} rows={4} className="mt-2 w-full rounded-lg border border-slate-200 p-3 text-sm dark:border-white/10 dark:bg-slate-900" aria-label="Edit AI suggested summary" />
+                  <p className="mt-2 text-xs text-slate-500">Review status: {aiReviewState ?? "Not reviewed"}. AI suggestions do not indicate government acceptance or action.</p>
+                  <button type="button" onClick={() => setAiReviewState("rejected")} className="mt-3 text-sm font-bold text-slate-600 underline">Reject AI suggestions and use my own details</button>
                 </div>
               </section>
             )}
@@ -439,33 +562,37 @@ export function ReportIssuePage() {
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               <label className="text-sm font-bold">
-                Location
+                Location or address
                 <input
+                  required
+                  minLength={2}
+                  maxLength={250}
                   value={form.location}
                   onChange={(e) => update("location", e.target.value)}
                   placeholder="Street, area, city"
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/5"
                 />
               </label>
-              <label className="text-sm font-bold">
-                Pincode
-                <input
-                  value={form.pincode}
-                  onChange={(e) => update("pincode", e.target.value)}
-                  placeholder="6-digit pincode"
-                  className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/5"
-                />
-              </label>
             </div>
-            <label className="text-sm font-bold">
-              Landmark
-              <input
-                value={form.landmark}
-                onChange={(e) => update("landmark", e.target.value)}
-                placeholder="Nearby landmark (optional)"
-                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-white/10 dark:bg-white/5"
-              />
-            </label>
+            <div className="rounded-xl border border-slate-200 p-4 dark:border-white/10">
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={requestCurrentLocation} className="rounded-xl border border-cyan-500 px-4 py-2 text-sm font-bold text-cyan-700 dark:text-cyan-300">Share current location (optional)</button>
+                {coordinates && <button type="button" onClick={() => {
+                  setCoordinates(undefined);
+                  setLocationStatus("GPS location removed. You can submit without coordinates.");
+                  setDuplicates([]);
+                }} className="text-sm font-semibold underline">Remove GPS</button>}
+              </div>
+              <p role="status" className="mt-2 text-xs text-slate-500">{locationStatus || "JAN Voice AI requests GPS only after you press the button. Address text remains available without GPS."}</p>
+            </div>
+          </section>
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/[.04] sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><h2 className="font-bold">Check for similar reports</h2><p className="mt-1 text-xs text-slate-500">Checks complaint text, category, and nearby shared GPS when available. It never merges or blocks reports.</p></div>
+              <button type="button" onClick={() => void runDuplicateCheck()} disabled={checkingDuplicates} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold disabled:opacity-60 dark:border-white/15">{checkingDuplicates ? "Checking…" : "Check similar reports"}</button>
+            </div>
+            {duplicateMessage && <p role="status" className={`mt-3 text-sm ${duplicates.length ? "font-semibold text-amber-700 dark:text-amber-300" : "text-slate-500"}`}>{duplicateMessage}</p>}
+            {duplicates.length > 0 && <ul className="mt-3 space-y-2">{duplicates.map((duplicate) => <li key={duplicate.reference} className="rounded-xl bg-amber-50 p-3 text-sm dark:bg-amber-400/10"><span className="font-bold">Possible match #{duplicate.reference.slice(-6)}</span><span className="ml-2 text-slate-600 dark:text-slate-300">{duplicate.category} · {duplicate.status}{duplicate.distanceMeters !== undefined ? ` · about ${duplicate.distanceMeters} m away` : ""}</span></li>)}</ul>}
           </section>
           <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-white/10 dark:bg-white/[.04] sm:p-7">
             <h2 className="font-bold">Attachments</h2>
@@ -480,20 +607,13 @@ export function ReportIssuePage() {
                   className="hidden"
                 />
               </label>
-              <label className="cursor-pointer rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm font-semibold text-slate-600 hover:border-cyan-400 dark:border-white/15 dark:text-slate-300">
-                <Icon
-                  name="tracking"
-                  className="mx-auto h-5 w-5 text-cyan-600"
-                />
-                <span className="mt-2 block">Video Upload</span>
-                <input type="file" accept="video/*" className="hidden" />
-              </label>
               <button
                 type="button"
+                onClick={voiceListening ? stopVoiceInput : startVoiceInput}
                 className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm font-semibold text-slate-600 hover:border-cyan-400 dark:border-white/15 dark:text-slate-300"
               >
                 <Icon name="mic" className="mx-auto h-5 w-5 text-cyan-600" />
-                <span className="mt-2 block">Voice Recording</span>
+                <span className="mt-2 block">{voiceListening ? "Stop Voice Input" : "Dictate Complaint"}</span>
               </button>
             </div>
             {imageError && (
@@ -510,15 +630,6 @@ export function ReportIssuePage() {
             )}
           </section>
           <div className="flex flex-wrap gap-5 text-sm font-semibold">
-            <label className="flex items-center gap-2">
-              <input
-                checked={form.anonymous}
-                onChange={(e) => update("anonymous", e.target.checked)}
-                type="checkbox"
-                className="accent-cyan-500"
-              />
-              Anonymous Report
-            </label>
             <label className="flex items-center gap-2 text-rose-600">
               <input
                 checked={form.emergency}
@@ -526,9 +637,10 @@ export function ReportIssuePage() {
                 type="checkbox"
                 className="accent-rose-500"
               />
-              Emergency
+              Flag as urgent for staff
             </label>
           </div>
+          <p className="-mt-4 text-xs text-slate-500">Your account remains linked so you can track the report. Staff views omit your account name. An urgent flag only highlights the report in this app and does not contact emergency services. GPS sharing remains optional.</p>
           {error && (
             <p className="text-sm font-semibold text-rose-600">{error}</p>
           )}
@@ -545,10 +657,7 @@ export function ReportIssuePage() {
               "Submit issue report"
             )}
           </button>
-        </form>
-      ) : (
-        <AnalysisResult issue={issue} />
-      )}
+      </form>
     </div>
   );
 }
@@ -559,82 +668,5 @@ function AiSuggestion({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-slate-500">{label}</p>
       <p className="mt-1 text-sm font-bold capitalize text-slate-900 dark:text-slate-100">{value}</p>
     </div>
-  );
-}
-
-function AnalysisResult({ issue }: { issue: Issue }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="mt-8 max-w-4xl space-y-6"
-    >
-      <div className="rounded-2xl bg-emerald-50 p-5 text-emerald-800 dark:bg-emerald-400/10 dark:text-emerald-200">
-        <p className="font-bold">✓ Report submitted successfully</p>
-        <p className="mt-1 text-sm">
-          Your issue has been saved and analyzed locally.
-        </p>
-      </div>
-      <section className="rounded-2xl border border-cyan-200 bg-cyan-50/60 p-6 dark:border-cyan-400/20 dark:bg-cyan-400/5">
-        <div className="flex items-center gap-2">
-          <Icon name="brain" className="text-cyan-600" />
-          <h2 className="font-bold">AI Analysis</h2>
-          <span className="ml-auto text-xs font-bold text-cyan-700 dark:text-cyan-300">
-            {issue.analysis.confidence}% confident
-          </span>
-        </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[
-            ["Issue Category", issue.analysis.category],
-            ["Priority Score", `${issue.analysis.priorityScore}/100`],
-            ["Severity Score", `${issue.analysis.severityScore}/10`],
-            ["Department", issue.analysis.department],
-            ["Estimated Resolution", issue.analysis.eta],
-            ["Confidence", `${issue.analysis.confidence}%`],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-xl bg-white p-3 dark:bg-slate-900"
-            >
-              <p className="text-xs text-slate-500">{label}</p>
-              <p className="mt-1 text-sm font-bold">{value}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/[.04]">
-        <h2 className="font-bold">Professional rewrite</h2>
-        <div className="mt-5 grid gap-4 md:grid-cols-[1fr_auto_1fr]">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Original complaint
-            </p>
-            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              {issue.description}
-            </p>
-          </div>
-          <span className="grid place-items-center text-cyan-600">↓</span>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-cyan-600">
-              AI improved complaint
-            </p>
-            <p className="mt-2 text-sm leading-6">
-              {issue.analysis.improvedComplaint}
-            </p>
-          </div>
-        </div>
-      </section>
-      <IssueCard issue={issue} />
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 dark:border-white/10 dark:bg-white/[.04]">
-        <h2 className="font-bold">Issue timeline</h2>
-        <Timeline issue={issue} />
-      </section>
-      <Link
-        to="/dashboard/citizen/reports"
-        className="inline-block rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white dark:bg-cyan-500 dark:text-slate-950"
-      >
-        View my reports
-      </Link>
-    </motion.div>
   );
 }

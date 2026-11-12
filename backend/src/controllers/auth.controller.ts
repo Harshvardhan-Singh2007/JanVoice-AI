@@ -4,7 +4,7 @@ import type { LoginInput, RegisterInput } from '../types/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { signAccessToken } from '../utils/jwt.js';
 
-const authResponse = (user: { id: string; fullName: string; email: string; phone?: string; role: 'citizen' | 'authority' | 'admin' }) => ({
+const authResponse = (user: { id: string; fullName: string; email: string; phone?: string; role: 'citizen' | 'authority' | 'admin'; department?: string }) => ({
   token: signAccessToken({ sub: user.id, role: user.role, email: user.email, fullName: user.fullName }),
   user,
 });

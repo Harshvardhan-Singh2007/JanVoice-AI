@@ -9,6 +9,7 @@ export interface User {
   phone?: string;
   password: string;
   role: UserRole;
+  department?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +30,7 @@ const userSchema = new Schema<User>(
     phone: { type: String, trim: true, maxlength: 20 },
     password: { type: String, required: true, select: false },
     role: { type: String, enum: userRoles, default: 'citizen', required: true },
+    department: { type: String, trim: true, minlength: 2, maxlength: 120 },
   },
   { timestamps: true },
 );

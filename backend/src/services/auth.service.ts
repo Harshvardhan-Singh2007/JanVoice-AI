@@ -9,12 +9,18 @@ const toAuthenticatedUser = (user: UserDocument): AuthenticatedUser => ({
   email: user.email,
   ...(user.phone ? { phone: user.phone } : {}),
   role: user.role,
+  ...(user.department ? { department: user.department } : {}),
 });
 
 export async function registerUser(input: RegisterInput): Promise<AuthenticatedUser> {
   const existingUser = await UserModel.exists({ email: input.email.toLowerCase() });
   if (existingUser) throw new ApiError(409, 'An account with this email already exists.');
-  const user = await UserModel.create({ ...input, email: input.email.toLowerCase(), password: await hashPassword(input.password) });
+  const user = await UserModel.create({
+    ...input,
+    email: input.email.toLowerCase(),
+    password: await hashPassword(input.password),
+    role: 'citizen',
+  });
   return toAuthenticatedUser(user);
 }
 

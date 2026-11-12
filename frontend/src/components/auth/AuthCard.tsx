@@ -7,7 +7,7 @@ export function AuthCard({ title, subtitle, children }: { title: string; subtitl
       <div className="mx-auto w-full max-w-md">
         <Link to="/" className="app-brand mb-8">
           <span className="app-brand-mark">J</span>
-          JanVoice <span className="text-[var(--color-primary)]">AI</span>
+          JAN Voice <span className="text-[var(--color-primary)]">AI</span>
         </Link>
         <div className="app-card p-6 sm:p-8">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>

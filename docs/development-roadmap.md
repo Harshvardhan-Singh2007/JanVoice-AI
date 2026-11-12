@@ -1,35 +1,29 @@
-# JanVoice AI Development Roadmap
+# JAN Voice AI development roadmap
 
-## Phase 1 — Foundation
+This roadmap distinguishes implemented prototype work from future scope. It does not describe an active government partnership or deployed service.
 
-- Define design tokens, accessibility standards, and responsive layout primitives.
-- Add application routes and page shells.
-- Establish API conventions, error handling, logging, and validation.
-- Configure MongoDB Atlas connection and data models.
+## Implemented prototype capabilities
 
-## Phase 2 — Identity and Reporting
+- React/TypeScript/Vite frontend and Express/TypeScript backend.
+- JWT-authenticated Citizen, Authority, and Admin role workflows. Public registration creates Citizen accounts only.
+- MongoDB/Mongoose complaint storage, citizen ownership checks, staff department scope, bounded pagination, and complaint update history.
+- Optional backend Gemini analysis with structured response validation, receipt verification, and citizen review state.
+- Optional Cloudinary image upload with content validation.
+- Browser speech-to-text transcript, explicit optional geolocation sharing, approximate OSM-based map display, and heuristic possible-duplicate warnings.
+- Admin department assignment, staff status/remarks workflow, and persisted citizen updates.
+- Automated backend/frontend tests and workspace type/lint/build scripts.
 
-- Implement JWT authentication and authorization roles.
-- Build issue creation, media upload through Cloudinary, and issue lifecycle APIs.
-- Build reporting, issue-detail, and user dashboard experiences.
+## Buildathon readiness work
 
-## Phase 3 — Location and Intelligence
+- Public copy describes prototype behavior and no external government delivery channel.
+- Dashboard actions link to implemented routes or are labeled planned.
+- Demo setup and presentation materials use isolated staging data and make no unsupported impact claims.
+- Production deployment and live-service verification are not included.
 
-- Integrate Google Maps for map selection, geocoding, and issue visualization.
-- Integrate OpenAI for issue categorization, summarization, and duplicate detection.
-- Add human-review controls and audit logging for AI-assisted actions.
+## Future scope
 
-## Phase 4 — Operations
-
-- Create municipal workflows, assignments, updates, and notifications.
-- Add analytics, moderation, rate limits, observability, tests, CI/CD, and security hardening.
-
-## Initial Architecture
-
-```text
-frontend/        React client application
-backend/         Express service
-docs/            Product and engineering documentation
-```
-
-Each workspace owns its runtime configuration. Keep secrets out of source control and use managed credentials in deployment environments.
+- User research and measured accessibility/usability evaluation.
+- Secure staff account provisioning and configured password recovery.
+- Language/localization and AI/duplicate-detection evaluation on representative consented data.
+- Operational monitoring, shared rate limits, CI/CD, and production hosting configuration.
+- Any public-service integration only with an accountable partner and explicit delivery/status contracts.

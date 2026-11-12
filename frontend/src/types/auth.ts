@@ -5,6 +5,7 @@ export interface AuthUser {
   email: string;
   phone?: string;
   role: UserRole;
+  department?: string;
 }
 
 export interface AuthResponse {

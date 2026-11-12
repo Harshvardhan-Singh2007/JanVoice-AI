@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthCard, FieldError } from '../components/auth/AuthCard';
-import { useAuth } from '../features/auth/AuthContext';
-import type { UserRole } from '../types/auth';
+import { useAuth } from '../features/auth/useAuth';
+import { getAuthErrorMessage } from '../features/auth/authErrors';
 
 export function SignupPage() {
   const { signup } = useAuth();
@@ -13,7 +13,6 @@ export function SignupPage() {
     phone: '',
     password: '',
     confirmPassword: '',
-    role: 'citizen' as UserRole,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,17 +29,17 @@ export function SignupPage() {
     setError('');
     setLoading(true);
     try {
-      const user = await signup({ fullName: form.fullName, email: form.email, phone: form.phone, password: form.password, role: form.role });
+      const user = await signup({ fullName: form.fullName, email: form.email, phone: form.phone, password: form.password });
       navigate(`/dashboard/${user.role}`);
-    } catch {
-      setError('Unable to create your account. This email may already be registered.');
+    } catch (cause) {
+      setError(getAuthErrorMessage(cause, 'Unable to create your account. Please try again.'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AuthCard title="Join JanVoice AI" subtitle="Create an account and be part of a better city.">
+    <AuthCard title="Join JAN Voice AI" subtitle="Create a Citizen account to submit and follow reports in this prototype.">
       <form onSubmit={submit} className="mt-7 grid gap-4">
         <label className="app-label">
           Full Name
@@ -56,14 +55,7 @@ export function SignupPage() {
             <input value={form.phone} onChange={(e) => update('phone', e.target.value)} type="tel" className="app-input" />
           </label>
         </div>
-        <label className="app-label">
-          Role
-          <select value={form.role} onChange={(e) => update('role', e.target.value)} className="app-input">
-            <option value="citizen">Citizen</option>
-            <option value="authority">Authority</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
+        <p className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">Public signup creates a Citizen account. Admin and Authority access is provisioned separately for approved demo staff.</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="app-label">
             Password
